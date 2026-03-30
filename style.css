@@ -598,6 +598,7 @@ body {
   font-weight: 800;
   box-shadow: 0 18px 32px rgba(10, 39, 75, 0.24);
   cursor: pointer;
+  display: none;
 }
 
 .floating-legend-panel {
