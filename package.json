@@ -1,0 +1,19 @@
+{
+  "name": "flyland-recovery-network-kpi-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "check": "node --check app.js && node --check charts.js && node --check dataLoader.js && node --check filters.js && node --check kpiCalculator.js && node --check table.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0",
+    "vite": "^8.0.3"
+  }
+}

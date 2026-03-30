@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flyland Recovery Network KPI Dashboard</title>
+    <link rel="icon" type="image/png" href="./agslogo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">
+            <img src="./agslogo.png" alt="Alliance Global Solutions logo" />
+          </div>
+          <div>
+            <p class="eyebrow">Alliance Global Solutions</p>
+            <h1>Flyland Recovery Network</h1>
+          </div>
+        </div>
+
+        <section class="sidebar-panel legend-panel">
+          <p class="panel-label">KPI Legend</p>
+          <div class="legend-kpi legend-transfer">
+            <strong>Transfer Rate</strong>
+            <div class="legend-scale-row">
+              <span class="score-pill score-1">1</span><span>&lt; 3%</span>
+              <span class="score-pill score-2">2</span><span>3% to 8%</span>
+              <span class="score-pill score-3">3</span><span>9% to 11%</span>
+              <span class="score-pill score-4">4</span><span>12% to 14%</span>
+              <span class="score-pill score-5">5</span><span>15%+</span>
+            </div>
+          </div>
+          <div class="legend-kpi legend-admits">
+            <strong>Admits</strong>
+            <div class="legend-scale-row">
+              <span class="score-pill score-1">1</span><span>0</span>
+              <span class="score-pill score-2">2</span><span>1 to 4</span>
+              <span class="score-pill score-3">3</span><span>5 to 8</span>
+              <span class="score-pill score-4">4</span><span>9 to 13</span>
+              <span class="score-pill score-5">5</span><span>above 13</span>
+            </div>
+          </div>
+          <div class="legend-kpi legend-aht">
+            <strong>AHT</strong>
+            <div class="legend-scale-row">
+              <span class="score-pill score-1">1</span><span>above 04:09</span>
+              <span class="score-pill score-2">2</span><span>03:32 to 02:55</span>
+              <span class="score-pill score-3">3</span><span>02:56 to 02:19</span>
+              <span class="score-pill score-4">4</span><span>02:20 to 01:44</span>
+              <span class="score-pill score-5">5</span><span>below 01:44</span>
+            </div>
+          </div>
+          <div class="legend-kpi legend-attendance">
+            <strong>Attendance</strong>
+            <div class="legend-scale-row">
+              <span class="score-pill score-1">1</span><span>below 90%</span>
+              <span class="score-pill score-2">2</span><span>90% to 94%</span>
+              <span class="score-pill score-3">3</span><span>95% to 99%</span>
+              <span class="score-pill score-4">4</span><span></span>
+              <span class="score-pill score-5">5</span><span>100%</span>
+            </div>
+          </div>
+          <div class="legend-kpi legend-qa">
+            <strong>QA</strong>
+            <div class="legend-scale-row">
+              <span class="score-pill score-1">1</span><span>below 95%</span>
+              <span class="score-pill score-2">2</span><span>95% to 97%</span>
+              <span class="score-pill score-3">3</span><span>98%</span>
+              <span class="score-pill score-4">4</span><span>99%</span>
+              <span class="score-pill score-5">5</span><span>100%</span>
+            </div>
+          </div>
+          <div class="legend-kpi legend-overall">
+            <strong>Overall Weight</strong>
+            <div class="legend-weight-grid">
+              <span>Performance</span><span>50%</span>
+              <span>Attendance</span><span>25%</span>
+              <span>QA</span><span>25%</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="sidebar-panel">
+          <p class="panel-label">Dashboard Focus</p>
+          <h2>Team Leader View</h2>
+          <p id="dataStatusText">
+            Loading KPI sources and preparing weekly scorecards.
+          </p>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="page-header" id="dashboardTop">
+          <div>
+            <h2 class="header-logo-title">
+              <img src="./Flyland.webp" alt="Flyland Recovery Network" class="header-logo" />
+            </h2>
+          </div>
+          <div class="header-meta">
+            <div class="meta-pill">
+              <span class="meta-label">Data Source</span>
+              <span>Google Sheets CSV</span>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">Deployment</span>
+              <span>Netlify Ready</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="top-filters card">
+          <div class="top-filters-header">
+            <div>
+              <p class="eyebrow">Quick Filters</p>
+              <h3>Filter by month, week, and agent</h3>
+            </div>
+            <button id="resetFilters" class="primary-button top-reset-button" type="button">
+              Reset Filters
+            </button>
+          </div>
+          <div class="top-filters-grid">
+            <label>
+              <span>Month</span>
+              <select id="monthFilter"></select>
+            </label>
+            <label>
+              <span>Week Ending</span>
+              <select id="weekFilter"></select>
+            </label>
+            <label>
+              <span>Agent</span>
+              <select id="agentFilter"></select>
+            </label>
+            <div class="comparison-note">
+              <span class="comparison-note-label">Comparison</span>
+              <p>Week-over-week charts automatically compare the selected week against the previous available week.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="summary-grid" id="summaryCards">
+          <article class="summary-card card" data-kpi="overall">
+            <div class="card-topline">
+              <span>Team Overall Score</span>
+              <span class="score-chip" id="overallCardBadge">-</span>
+            </div>
+            <strong id="overallScoreValue">--</strong>
+            <p class="summary-subtext" id="overallScoreRaw">Performance 50% + Attendance 25% + QA 25%</p>
+            <p id="overallScoreDelta">Week-over-week pending</p>
+          </article>
+
+          <article class="summary-card card" data-kpi="transfer">
+            <div class="card-topline">
+              <span>Transfer Score</span>
+              <span class="score-chip" id="transferCardBadge">-</span>
+            </div>
+            <strong id="transferScoreValue">--</strong>
+            <p class="summary-subtext" id="transferScoreRaw">Transfer rate pending</p>
+            <p id="transferScoreDelta">Week-over-week pending</p>
+          </article>
+
+          <article class="summary-card card" data-kpi="admits">
+            <div class="card-topline">
+              <span>Admits Score</span>
+              <span class="score-chip" id="admitsCardBadge">-</span>
+            </div>
+            <strong id="admitsScoreValue">--</strong>
+            <p class="summary-subtext" id="admitsScoreRaw">Admits count pending</p>
+            <p id="admitsScoreDelta">Week-over-week pending</p>
+          </article>
+
+          <article class="summary-card card" data-kpi="aht">
+            <div class="card-topline">
+              <span>AHT Score</span>
+              <span class="score-chip" id="ahtCardBadge">-</span>
+            </div>
+            <strong id="ahtScoreValue">--</strong>
+            <p class="summary-subtext" id="ahtScoreRaw">Average handle time pending</p>
+            <p id="ahtScoreDelta">Week-over-week pending</p>
+          </article>
+
+          <article class="summary-card card" data-kpi="attendance">
+            <div class="card-topline">
+              <span>Attendance Score</span>
+              <span class="score-chip" id="attendanceCardBadge">-</span>
+            </div>
+            <strong id="attendanceScoreValue">--</strong>
+            <p class="summary-subtext" id="attendanceScoreRaw">Attendance percent pending</p>
+            <p id="attendanceScoreDelta">Week-over-week pending</p>
+          </article>
+
+          <article class="summary-card card" data-kpi="qa">
+            <div class="card-topline">
+              <span>QA Score</span>
+              <span class="score-chip" id="qaCardBadge">-</span>
+            </div>
+            <strong id="qaScoreValue">--</strong>
+            <p class="summary-subtext" id="qaScoreRaw">QA percent pending</p>
+            <p id="qaScoreDelta">Week-over-week pending</p>
+          </article>
+        </section>
+
+        <section class="raw-grid" id="monthlySection">
+          <article class="raw-card card">
+            <span class="raw-label">Average Transfer Rate</span>
+            <strong id="avgTransferRateValue">--</strong>
+            <p class="raw-delta" id="avgTransferRateDelta">Vs previous week pending</p>
+          </article>
+          <article class="raw-card card">
+            <span class="raw-label">Average Admits Count</span>
+            <strong id="avgAdmitsCountValue">--</strong>
+            <p class="raw-delta" id="avgAdmitsCountDelta">Vs previous week pending</p>
+          </article>
+          <article class="raw-card card">
+            <span class="raw-label">Average AHT</span>
+            <strong id="avgAhtValue">--</strong>
+            <p class="raw-delta" id="avgAhtDelta">Vs previous week pending</p>
+          </article>
+          <article class="raw-card card">
+            <span class="raw-label">Average Attendance</span>
+            <strong id="avgAttendanceValue">--</strong>
+            <p class="raw-delta" id="avgAttendanceDelta">Vs previous week pending</p>
+          </article>
+          <article class="raw-card card">
+            <span class="raw-label">Average QA</span>
+            <strong id="avgQaValue">--</strong>
+            <p class="raw-delta" id="avgQaDelta">Vs previous week pending</p>
+          </article>
+          <article class="raw-card card">
+            <span class="raw-label">Agents in Scope</span>
+            <strong id="avgAgentsValue">--</strong>
+            <p class="raw-delta" id="avgAgentsDelta">Vs previous week pending</p>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="chart-card card chart-span-wide">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Trend Analysis</p>
+                <h3>Weekly KPI trends</h3>
+              </div>
+            </div>
+            <canvas id="trendChart" aria-label="Weekly KPI trends" role="img"></canvas>
+          </article>
+        </section>
+
+        <section class="insight-grid">
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Selected Week</p>
+                <h3>KPI score snapshot</h3>
+              </div>
+            </div>
+            <canvas id="weekScoreChart" aria-label="Selected week KPI scores" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Weighted Mix</p>
+                <h3>Overall score contribution</h3>
+              </div>
+            </div>
+            <canvas id="contributionChart" aria-label="Weighted score contribution" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Variance</p>
+                <h3>KPI variance</h3>
+              </div>
+            </div>
+            <canvas id="varianceChart" aria-label="KPI variance chart" role="img"></canvas>
+          </article>
+        </section>
+
+        <section class="content-grid">
+
+          <article class="chart-card card chart-span-wide distribution-card" data-scope="team-only">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Distribution</p>
+                <h3>Agent score distribution by KPI</h3>
+              </div>
+            </div>
+            <div class="distribution-grid">
+              <div class="distribution-item distribution-panel distribution-panel-transfer">
+                <p class="distribution-title distribution-transfer">Transfer</p>
+                <canvas id="transferDistributionChart" aria-label="Transfer distribution" role="img"></canvas>
+              </div>
+              <div class="distribution-item distribution-panel distribution-panel-admits">
+                <p class="distribution-title distribution-admits">Admits</p>
+                <canvas id="admitsDistributionChart" aria-label="Admits distribution" role="img"></canvas>
+              </div>
+              <div class="distribution-item distribution-panel distribution-panel-aht">
+                <p class="distribution-title distribution-aht">AHT</p>
+                <canvas id="ahtDistributionChart" aria-label="AHT distribution" role="img"></canvas>
+              </div>
+              <div class="distribution-item distribution-panel distribution-panel-attendance">
+                <p class="distribution-title distribution-attendance">Attendance</p>
+                <canvas id="attendanceDistributionChart" aria-label="Attendance distribution" role="img"></canvas>
+              </div>
+              <div class="distribution-item distribution-panel distribution-panel-qa">
+                <p class="distribution-title distribution-qa">QA</p>
+                <canvas id="qaDistributionChart" aria-label="QA distribution" role="img"></canvas>
+              </div>
+            </div>
+          </article>
+
+          <article class="chart-card card chart-span-wide" id="agentsSection" data-scope="team-only">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Ranking</p>
+                <h3>Top 10 agent overall score ranking</h3>
+              </div>
+            </div>
+            <canvas id="rankingChart" aria-label="Agent overall score ranking" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card chart-span-wide" data-scope="team-only">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Breakdown</p>
+                <h3>KPI breakdown per agent</h3>
+              </div>
+            </div>
+            <canvas id="stackedChart" aria-label="KPI breakdown per agent" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card chart-span-wide" id="comparisonSection">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Comparison</p>
+                <h3 id="comparisonTitle">Selected week vs previous week</h3>
+                <p class="chart-subnote" id="comparisonSubnote">Comparing the latest available week against the previous week.</p>
+              </div>
+            </div>
+            <canvas id="comparisonChart" aria-label="Week over week comparison" role="img"></canvas>
+          </article>
+        </section>
+
+        <section class="performer-grid" data-scope="team-only">
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Top Performers</p>
+                <h3>Top 5 agents</h3>
+              </div>
+            </div>
+            <canvas id="topAgentsChart" aria-label="Top 5 agents" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Watchlist</p>
+                <h3>Bottom 5 agents</h3>
+              </div>
+            </div>
+            <canvas id="bottomAgentsChart" aria-label="Bottom 5 agents" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Momentum</p>
+                <h3>Most improved agents</h3>
+              </div>
+            </div>
+            <canvas id="mostImprovedChart" aria-label="Most improved agents" role="img"></canvas>
+          </article>
+        </section>
+
+        <section class="table-card card">
+          <div class="table-header">
+            <div>
+              <p class="eyebrow">Team Detail</p>
+              <h3>All agents KPI score table</h3>
+            </div>
+            <div class="table-actions">
+              <label class="search-field table-search" for="tableSearch">
+                <span>Search agent or week</span>
+                <input
+                  id="tableSearch"
+                  name="tableSearch"
+                  type="search"
+                  placeholder="Type to filter the table"
+                />
+              </label>
+              <button id="exportCsvButton" class="primary-button" type="button">
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr id="tableHeadRow"></tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
