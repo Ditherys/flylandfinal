@@ -1,5 +1,5 @@
 import { loadAllDatasets } from "./dataLoader.js";
-import { buildKpiDataset, getBottomPerformers, getTopPerformers } from "./kpiCalculator.js";
+import { buildKpiDataset, getBottomPerformers } from "./kpiCalculator.js";
 import { getAvailableAgents, getAvailableWeeks, getFilteredRecords, populateSelect } from "./filters.js";
 import {
   renderBarChart,
@@ -8,7 +8,7 @@ import {
   renderDistributionChart,
   renderImprovementChart,
   renderLineChart,
-  renderRankingChart,
+  renderRankingList,
   renderStackedBarChart,
   renderTopBottomChart,
   renderVarianceChart,
@@ -115,13 +115,12 @@ const elements = {
   ahtDistributionChart: document.querySelector("#ahtDistributionChart"),
   attendanceDistributionChart: document.querySelector("#attendanceDistributionChart"),
   qaDistributionChart: document.querySelector("#qaDistributionChart"),
-  rankingChart: document.querySelector("#rankingChart"),
+  rankingList: document.querySelector("#rankingList"),
   stackedChart: document.querySelector("#stackedChart"),
   comparisonChart: document.querySelector("#comparisonChart"),
   comparisonTitle: document.querySelector("#comparisonTitle"),
   comparisonSubnote: document.querySelector("#comparisonSubnote"),
   rankingSubnote: document.querySelector("#rankingSubnote"),
-  topAgentsChart: document.querySelector("#topAgentsChart"),
   bottomAgentsChart: document.querySelector("#bottomAgentsChart"),
   mostImprovedChart: document.querySelector("#mostImprovedChart"),
   viewInsightTitle: document.querySelector("#viewInsightTitle"),
@@ -357,6 +356,17 @@ function renderDistributionDrilldownContent() {
   const detail = state.distributionDrilldownDetail;
   if (!detail) return;
 
+  if (detail.mode === "breakdown") {
+    elements.distributionDrilldownTitle.textContent = detail.agentName;
+    elements.distributionDrilldownSubnote.textContent = `${detail.weekEnding} | KPI breakdown for the selected agent row.`;
+    elements.distributionDrilldownList.innerHTML = detail.items.map((item) => `
+      <div class="distribution-drilldown-item">
+        ${item.label}: ${item.value}${item.score ? ` | Score ${item.score}` : ""}
+      </div>
+    `).join("");
+    return;
+  }
+
   elements.distributionDrilldownTitle.textContent = `${detail.label} | Score ${detail.score}`;
   elements.distributionDrilldownSubnote.textContent = `${detail.count} agent(s) in this bucket out of ${detail.total} scored agents.`;
   if (!detail.agents.length) {
@@ -381,6 +391,54 @@ function openDistributionDrilldown(detail) {
   state.distributionDrilldownOpen = true;
   state.distributionDrilldownExpanded = false;
   state.distributionDrilldownDetail = detail;
+  renderDistributionDrilldownContent();
+  applyDistributionDrilldownState();
+}
+
+function openBreakdownDrilldown(record) {
+  state.distributionDrilldownOpen = true;
+  state.distributionDrilldownExpanded = false;
+  state.distributionDrilldownDetail = {
+    mode: "breakdown",
+    agentName: record.agentName,
+    weekEnding: record.weekEnding,
+    items: [
+      {
+        label: "Transfer",
+        value: record.transferRateDisplay,
+        score: formatScore(record.transferScore),
+      },
+      {
+        label: "Admits",
+        value: record.admitsCount === null || record.admitsCount === undefined ? "N/A" : Number(record.admitsCount).toFixed(0),
+        score: formatScore(record.admitsScore),
+      },
+      {
+        label: "AHT",
+        value: record.ahtDisplay,
+        score: formatScore(record.ahtScore),
+      },
+      {
+        label: "Attendance",
+        value: record.attendancePercentDisplay,
+        score: formatScore(record.attendanceScore),
+      },
+      {
+        label: "QA",
+        value: record.qaPercentDisplay,
+        score: formatScore(record.qaScore),
+      },
+      {
+        label: "Combined KPI total",
+        value: formatScore(
+          [record.transferScore, record.admitsScore, record.ahtScore, record.attendanceScore, record.qaScore]
+            .filter((value) => typeof value === "number" && !Number.isNaN(value))
+            .reduce((sum, value) => sum + value, 0)
+        ),
+        score: null,
+      },
+    ],
+  };
   renderDistributionDrilldownContent();
   applyDistributionDrilldownState();
 }
@@ -973,8 +1031,8 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     const qaPending = !hasValidNumber(weekSummary.qaScore);
     elements.rankingSubnote.textContent =
       state.filters.week !== "all"
-        ? `Top 10 for ${state.filters.week}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`
-        : `Latest top 10 within ${state.filters.month === "all" ? "this view" : state.filters.month}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`;
+        ? `Top 5 for ${state.filters.week}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`
+        : `Latest top 5 within ${state.filters.month === "all" ? "this view" : state.filters.month}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`;
   }
 
   state.charts.trend = renderLineChart(elements.trendChart, state.charts.trend, weeklyAverages);
@@ -1021,14 +1079,13 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     "QA Distribution",
     "#EC4899"
   );
-  state.charts.ranking = renderRankingChart(elements.rankingChart, state.charts.ranking, chartRecords);
-  state.charts.stacked = renderStackedBarChart(elements.stackedChart, state.charts.stacked, chartRecords);
+  renderRankingList(elements.rankingList, chartRecords);
+  state.charts.stacked = renderStackedBarChart(elements.stackedChart, state.charts.stacked, chartRecords, openBreakdownDrilldown);
   state.charts.comparison = renderComparisonChart(
     elements.comparisonChart,
     state.charts.comparison,
     comparisonWeeklyAverages
   );
-  state.charts.top = renderTopBottomChart(elements.topAgentsChart, state.charts.top, getTopPerformers(chartRecords), "Top 5 Overall Score");
   state.charts.bottom = renderTopBottomChart(elements.bottomAgentsChart, state.charts.bottom, getBottomPerformers(chartRecords), "Bottom 5 Overall Score");
   state.charts.improved = renderImprovementChart(
     elements.mostImprovedChart,

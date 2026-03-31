@@ -1561,10 +1561,16 @@ select {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
+  align-items: start;
 }
 
 .chart-card {
   min-height: 320px;
+}
+
+.performer-grid .chart-card {
+  min-height: 0;
+  height: auto;
 }
 
 .chart-span-wide {
@@ -1600,6 +1606,37 @@ select {
 .chart-external-tooltip-body {
   display: grid;
   gap: 0.12rem;
+}
+
+.chart-external-tooltip-kpi {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  color: #f8fbff;
+}
+
+.chart-external-tooltip-rows {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chart-external-tooltip-row {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.chart-external-tooltip-kpi strong {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.chart-external-tooltip-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
 }
 
 .chart-external-tooltip-footer {
@@ -1690,8 +1727,131 @@ select {
   margin-top: 0;
 }
 
-#rankingChart {
-  height: 320px !important;
+.ranking-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.ranking-list-item {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid rgba(219, 227, 240, 0.95);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.92));
+}
+
+.ranking-list-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border-radius: 10px;
+  background: #eff3fb;
+  color: #233659;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.ranking-list-main {
+  min-width: 0;
+  display: grid;
+  gap: 0.36rem;
+}
+
+.ranking-list-topline,
+.ranking-list-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ranking-list-topline strong {
+  min-width: 0;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.ranking-list-topline span {
+  flex-shrink: 0;
+  font-weight: 800;
+  color: #10213d;
+}
+
+.ranking-list-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(214, 223, 238, 0.8);
+  overflow: hidden;
+}
+
+.ranking-list-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2e466f, #10213d);
+}
+
+.ranking-list-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+  row-gap: 0.18rem;
+}
+
+.ranking-list-item.is-rank-1 .ranking-list-rank {
+  background: linear-gradient(135deg, rgba(187, 157, 101, 0.22), rgba(227, 214, 186, 0.38));
+  color: #6b5325;
+}
+
+.ranking-list-item.is-rank-2 .ranking-list-rank,
+.ranking-list-item.is-rank-3 .ranking-list-rank {
+  background: linear-gradient(135deg, rgba(212, 220, 232, 0.78), rgba(237, 241, 247, 0.96));
+}
+
+#agentsSection .ranking-list {
+  gap: 0.42rem;
+  margin-top: 0.7rem;
+}
+
+#agentsSection .ranking-list-item {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.58rem;
+  padding: 0.48rem 0.6rem;
+  border-radius: 12px;
+}
+
+#agentsSection .ranking-list-rank {
+  min-height: 30px;
+  font-size: 0.76rem;
+}
+
+#agentsSection .ranking-list-main {
+  gap: 0.24rem;
+}
+
+#agentsSection .ranking-list-topline strong {
+  font-size: 0.82rem;
+}
+
+#agentsSection .ranking-list-topline span {
+  font-size: 0.8rem;
+}
+
+#agentsSection .ranking-list-bar-track {
+  height: 6px;
+}
+
+#agentsSection .ranking-list-meta {
+  font-size: 0.66rem;
+  row-gap: 0.12rem;
 }
 
 #stackedChart,
@@ -2278,24 +2438,28 @@ tbody td:first-child {
     order: 7;
   }
 
-  #performersSection {
-    order: 8;
-  }
-
   #deepDiveSection {
     order: 9;
   }
 
-  #monthlySection {
+  #performersSection {
+    order: 8;
+  }
+
+  #diagnosticsSection {
     order: 10;
   }
 
-  #filtersSection {
+  #monthlySection {
     order: 11;
   }
 
-  #tableSection {
+  #filtersSection {
     order: 12;
+  }
+
+  #tableSection {
+    order: 13;
   }
 
   #snapshotSection > .chart-card:nth-child(1) {
@@ -2320,10 +2484,6 @@ tbody td:first-child {
 
   #breakdownSection {
     order: 3;
-  }
-
-  #distributionSection {
-    order: 4;
   }
 
   .mobile-home-header {
@@ -2730,9 +2890,29 @@ tbody td:first-child {
     height: 420px !important;
   }
 
-  #comparisonChart,
-  #rankingChart {
+  #comparisonChart {
     height: 250px !important;
+  }
+
+  .ranking-list-item {
+    grid-template-columns: 50px minmax(0, 1fr);
+    padding: 0.72rem 0.78rem;
+  }
+
+  .ranking-list-topline strong {
+    font-size: 0.9rem;
+  }
+
+  .ranking-list-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .ranking-list {
+    grid-template-columns: 1fr;
   }
 }
 

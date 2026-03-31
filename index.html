@@ -457,10 +457,64 @@
             </div>
             <canvas id="varianceChart" aria-label="KPI variance chart" role="img"></canvas>
           </article>
+
+          <article class="chart-card card chart-span-wide" id="comparisonSection">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Comparison</p>
+                <h3 id="comparisonTitle">Selected week vs previous week</h3>
+                <p class="chart-subnote" id="comparisonSubnote">Comparing the latest available week against the previous week.</p>
+              </div>
+            </div>
+            <canvas id="comparisonChart" aria-label="Week over week comparison" role="img"></canvas>
+          </article>
+        </section>
+
+        <section class="performer-grid" id="performersSection" data-scope="team-only">
+          <article class="chart-card card" id="agentsSection" data-scope="team-only">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Ranking</p>
+                <h3>Top 5 agent overall score ranking</h3>
+                <p class="chart-subnote" id="rankingSubnote">Showing the highest overall scores for the active selection.</p>
+              </div>
+            </div>
+            <div id="rankingList" class="ranking-list" aria-label="Agent overall score ranking" role="list"></div>
+          </article>
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Watchlist</p>
+                <h3>Bottom 5 agents</h3>
+              </div>
+            </div>
+            <canvas id="bottomAgentsChart" aria-label="Bottom 5 agents" role="img"></canvas>
+          </article>
+
+          <article class="chart-card card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Momentum</p>
+                <h3>Most improved agents</h3>
+              </div>
+            </div>
+            <canvas id="mostImprovedChart" aria-label="Most improved agents" role="img"></canvas>
+          </article>
         </section>
 
         <section class="content-grid" id="deepDiveSection">
+          <article class="chart-card card chart-span-wide" id="breakdownSection" data-scope="team-only">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Breakdown</p>
+                <h3>KPI breakdown per agent</h3>
+              </div>
+            </div>
+            <canvas id="stackedChart" aria-label="KPI breakdown per agent" role="img"></canvas>
+          </article>
+        </section>
 
+        <section class="content-grid" id="diagnosticsSection">
           <article class="chart-card card chart-span-wide distribution-card" id="distributionSection" data-scope="team-only">
             <div class="section-heading">
               <div>
@@ -497,70 +551,6 @@
                 <canvas id="qaDistributionChart" aria-label="QA distribution" role="img"></canvas>
               </div>
             </div>
-          </article>
-
-          <article class="chart-card card chart-span-wide" id="agentsSection" data-scope="team-only">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Ranking</p>
-                <h3>Top 10 agent overall score ranking</h3>
-                <p class="chart-subnote" id="rankingSubnote">Showing the highest overall scores for the active selection.</p>
-              </div>
-            </div>
-            <canvas id="rankingChart" aria-label="Agent overall score ranking" role="img"></canvas>
-          </article>
-
-          <article class="chart-card card chart-span-wide" id="breakdownSection" data-scope="team-only">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Breakdown</p>
-                <h3>KPI breakdown per agent</h3>
-              </div>
-            </div>
-            <canvas id="stackedChart" aria-label="KPI breakdown per agent" role="img"></canvas>
-          </article>
-
-          <article class="chart-card card chart-span-wide" id="comparisonSection">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Comparison</p>
-                <h3 id="comparisonTitle">Selected week vs previous week</h3>
-                <p class="chart-subnote" id="comparisonSubnote">Comparing the latest available week against the previous week.</p>
-              </div>
-            </div>
-            <canvas id="comparisonChart" aria-label="Week over week comparison" role="img"></canvas>
-          </article>
-        </section>
-
-        <section class="performer-grid" id="performersSection" data-scope="team-only">
-          <article class="chart-card card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Top Performers</p>
-                <h3>Top 5 agents</h3>
-              </div>
-            </div>
-            <canvas id="topAgentsChart" aria-label="Top 5 agents" role="img"></canvas>
-          </article>
-
-          <article class="chart-card card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Watchlist</p>
-                <h3>Bottom 5 agents</h3>
-              </div>
-            </div>
-            <canvas id="bottomAgentsChart" aria-label="Bottom 5 agents" role="img"></canvas>
-          </article>
-
-          <article class="chart-card card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Momentum</p>
-                <h3>Most improved agents</h3>
-              </div>
-            </div>
-            <canvas id="mostImprovedChart" aria-label="Most improved agents" role="img"></canvas>
           </article>
         </section>
 

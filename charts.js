@@ -144,7 +144,92 @@ const strictChartAreaTooltipPlugin = {
   },
 };
 
-Chart.register(valueLabelPlugin, strictChartAreaTooltipPlugin);
+const exactTouchTooltipPlugin = {
+  id: "exactTouchTooltipPlugin",
+  afterEvent(chart, args, pluginOptions) {
+    if (!pluginOptions?.enabled) return;
+
+    const event = args.event;
+    if (!event || !["click", "touchstart", "touchmove", "mousemove"].includes(event.type)) return;
+
+    const matches = [];
+    if (pluginOptions.strategy === "horizontal-bar-row") {
+      const meta = chart.getSortedVisibleDatasetMetas()[0];
+      const area = chart.chartArea;
+      meta?.data?.forEach((element, index) => {
+        const props = element.getProps(["y", "height"], true);
+        const left = area?.left ?? 0;
+        const right = area?.right ?? 0;
+        const top = props.y - props.height / 2 - 6;
+        const bottom = props.y + props.height / 2 + 6;
+
+        if (event.y >= top && event.y <= bottom && event.x >= left && event.x <= right) {
+          matches.push({
+            datasetIndex: meta.index,
+            index,
+          });
+        }
+      });
+    } else if (pluginOptions.strategy === "stacked-horizontal-row-all") {
+      const metas = chart.getSortedVisibleDatasetMetas();
+      const leadMeta = metas[0];
+      const area = chart.chartArea;
+      leadMeta?.data?.forEach((element, index) => {
+        const props = element.getProps(["y", "height"], true);
+        const left = area?.left ?? 0;
+        const right = area?.right ?? 0;
+        const top = props.y - props.height / 2 - 8;
+        const bottom = props.y + props.height / 2 + 8;
+
+        if (event.y >= top && event.y <= bottom && event.x >= left && event.x <= right) {
+          metas.forEach((meta) => {
+            matches.push({
+              datasetIndex: meta.index,
+              index,
+            });
+          });
+        }
+      });
+    } else {
+      chart.getSortedVisibleDatasetMetas().forEach((meta) => {
+        meta.data.forEach((element, index) => {
+          if (typeof element.inRange === "function" && element.inRange(event.x, event.y, true)) {
+            matches.push({
+              datasetIndex: meta.index,
+              index,
+            });
+          }
+        });
+      });
+    }
+
+    if (!matches.length) {
+      if (pluginOptions.clearOnMiss) {
+        chart.setActiveElements([]);
+        chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+        args.changed = true;
+      }
+      return;
+    }
+
+    const [match] = matches;
+    const element = chart.getDatasetMeta(match.datasetIndex)?.data?.[match.index];
+    if (!element) return;
+
+    const props = element.getProps(["x", "y", "base"], true);
+    const position = pluginOptions.strategy === "horizontal-bar-row" || pluginOptions.strategy === "stacked-horizontal-row-all"
+      ? {
+        x: (Number(props.x) + Number(props.base)) / 2,
+        y: Number(props.y),
+      }
+      : element.tooltipPosition();
+    chart.setActiveElements(matches);
+    chart.tooltip?.setActiveElements(matches, position);
+    args.changed = true;
+  },
+};
+
+Chart.register(valueLabelPlugin, strictChartAreaTooltipPlugin, exactTouchTooltipPlugin);
 
 function destroyIfExists(chart) {
   if (chart?.canvas?.dataset?.externalTooltipId) {
@@ -198,6 +283,83 @@ function externalDistributionTooltip(context) {
     renderTooltipSection(afterBodyLines, "chart-external-tooltip-body chart-external-tooltip-agents"),
     renderTooltipSection(footerLines, "chart-external-tooltip-footer"),
   ].join("");
+
+  const canvasRect = chart.canvas.getBoundingClientRect();
+  const tooltipRect = tooltipEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const gap = 14;
+
+  let left = canvasRect.left + window.scrollX + tooltip.caretX - tooltipRect.width / 2;
+  let top = canvasRect.top + window.scrollY + tooltip.caretY - tooltipRect.height - gap;
+
+  if (left + tooltipRect.width > window.scrollX + viewportWidth - 12) {
+    left = window.scrollX + viewportWidth - tooltipRect.width - 12;
+  }
+  if (left < window.scrollX + 12) {
+    left = window.scrollX + 12;
+  }
+
+  if (top < window.scrollY + 12) {
+    top = canvasRect.top + window.scrollY + tooltip.caretY + gap;
+  }
+  if (top + tooltipRect.height > window.scrollY + viewportHeight - 12) {
+    top = Math.max(window.scrollY + 12, window.scrollY + viewportHeight - tooltipRect.height - 12);
+  }
+
+  tooltipEl.style.opacity = "1";
+  tooltipEl.style.pointerEvents = "none";
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+}
+
+function externalStackedTooltip(context) {
+  const { chart, tooltip } = context;
+  const tooltipEl = getOrCreateExternalTooltip(chart.canvas);
+  if (!tooltipEl) return;
+
+  if (tooltip.opacity === 0) {
+    tooltipEl.style.opacity = "0";
+    tooltipEl.style.pointerEvents = "none";
+    return;
+  }
+
+  const title = tooltip.title?.[0] || "";
+  const uniqueDataPoints = (tooltip.dataPoints || []).map((dataPoint, index) => ({
+    dataPoint,
+    bodyLines: tooltip.body?.[index]?.lines || [],
+  })).filter(({ dataPoint }, index, items) => {
+    const datasetLabel = dataPoint?.dataset?.label || "";
+    const dataIndex = dataPoint?.dataIndex ?? -1;
+    return index === items.findIndex((item) => {
+      const itemLabel = item?.dataPoint?.dataset?.label || "";
+      const itemIndex = item?.dataPoint?.dataIndex ?? -1;
+      return itemLabel === datasetLabel && itemIndex === dataIndex;
+    });
+  });
+
+  const tooltipRows = uniqueDataPoints.map(({ dataPoint, bodyLines }) => {
+    const color = dataPoint?.dataset?.backgroundColor || "#10213d";
+    const kpiLabel = dataPoint?.dataset?.label || "";
+    return `
+      <div class="chart-external-tooltip-row">
+        <div class="chart-external-tooltip-kpi">
+          <span class="chart-external-tooltip-swatch" style="background:${color}"></span>
+          <strong>${kpiLabel}</strong>
+        </div>
+        <div class="chart-external-tooltip-body">
+          ${bodyLines.map((line) => `<div>${line}</div>`).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+  const footer = tooltip.footer?.[0] || "";
+
+  tooltipEl.innerHTML = `
+    <div class="chart-external-tooltip-title">${title}</div>
+    <div class="chart-external-tooltip-rows">${tooltipRows}</div>
+    ${footer ? `<div class="chart-external-tooltip-footer">${footer}</div>` : ""}
+  `;
 
   const canvasRect = chart.canvas.getBoundingClientRect();
   const tooltipRect = tooltipEl.getBoundingClientRect();
@@ -645,9 +807,20 @@ export function renderVarianceChart(canvas, chart, weeklyAverages) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: "nearest",
+        axis: "x",
+        intersect: false,
+      },
       plugins: {
         legend: {
           display: false,
+        },
+        strictChartAreaTooltipPlugin: {
+          enabled: true,
+        },
+        exactTouchTooltipPlugin: {
+          enabled: isMobile,
         },
         valueLabelPlugin: {
           enabled: true,
@@ -714,109 +887,43 @@ export function renderVarianceChart(canvas, chart, weeklyAverages) {
   });
 }
 
-export function renderRankingChart(canvas, chart, records) {
-  destroyIfExists(chart);
+export function renderRankingList(container, records) {
+  if (!container) return;
   const ranked = [...records]
     .filter((record) => typeof record.overallScore === "number" && !Number.isNaN(record.overallScore))
     .sort((left, right) => right.overallScore - left.overallScore)
-    .slice(0, 10);
-  const barColors = ranked.map((_, index) => {
-    if (index === 0) return "#0f172a";
-    if (index === 1) return "#1f2937";
-    if (index === 2) return "#334155";
-    return "#475569";
-  });
+    .slice(0, 5);
+  if (!ranked.length) {
+    container.innerHTML = '<div class="status-message">No ranked rows are available for the current selection.</div>';
+    return;
+  }
 
-  return new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels: ranked.map((record, index) => `#${index + 1} ${record.agentName}`),
-      datasets: [
-        {
-          label: "Overall Score",
-          data: ranked.map((record) => record.overallScore),
-          backgroundColor: barColors,
-          borderColor: "#0f172a",
-          borderWidth: 1.5,
-          borderRadius: 10,
-          barThickness: 18,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: "y",
-      interaction: {
-        mode: "nearest",
-        axis: "xy",
-        intersect: true,
-      },
-      plugins: {
-        legend: {
-          display: false,
-        },
-        strictChartAreaTooltipPlugin: {
-          enabled: true,
-        },
-        valueLabelPlugin: {
-          enabled: true,
-          color: "#ffffff",
-          fontSize: 11,
-          fontWeight: "800",
-          inside: true,
-          offset: 10,
-          formatter(value) {
-            return Number(value).toFixed(2);
-          },
-        },
-        tooltip: {
-          ...buildBaseOptions().plugins.tooltip,
-          callbacks: {
-            title(items) {
-              const record = ranked[items[0]?.dataIndex ?? -1];
-              if (!record) return "";
-              const rank = (items[0]?.dataIndex ?? 0) + 1;
-              return `#${rank} ${record.agentName}`;
-            },
-            label(context) {
-              const record = ranked[context.dataIndex];
-              const weakestKpi = getWeakestKpi(record);
-              return [
-                `Overall: ${Number(context.parsed.x).toFixed(2)}`,
-                `Performance: ${isValidMetric(record?.performanceScore) ? Number(record.performanceScore).toFixed(2) : "N/A"}`,
-                weakestKpi
-                  ? `Weakest KPI: ${weakestKpi.label} (${Number(weakestKpi.score).toFixed(0)})${weakestKpi.rawValue ? ` | ${weakestKpi.rawValue}` : ""}`
-                  : "Weakest KPI: N/A",
-              ];
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          max: 5,
-          grid: {
-            color: "rgba(16, 33, 61, 0.08)",
-          },
-        },
-        y: {
-          ticks: {
-            font: {
-              size: 11,
-            },
-          },
-          grid: {
-            display: false,
-          },
-        },
-      },
-    },
-  });
+  container.innerHTML = ranked.map((record, index) => {
+    const weakestKpi = getWeakestKpi(record);
+    const rankClass = index === 0 ? "is-rank-1" : index === 1 ? "is-rank-2" : index === 2 ? "is-rank-3" : "";
+    const width = Math.max(8, Math.min(100, (Number(record.overallScore) / 5) * 100));
+    return `
+      <article class="ranking-list-item ${rankClass}" role="listitem">
+        <div class="ranking-list-rank">#${index + 1}</div>
+        <div class="ranking-list-main">
+          <div class="ranking-list-topline">
+            <strong>${record.agentName}</strong>
+            <span>${Number(record.overallScore).toFixed(2)}</span>
+          </div>
+          <div class="ranking-list-bar-track" aria-hidden="true">
+            <span class="ranking-list-bar-fill" style="width: ${width}%"></span>
+          </div>
+          <div class="ranking-list-meta">
+            <span>Performance ${isValidMetric(record?.performanceScore) ? Number(record.performanceScore).toFixed(2) : "N/A"}</span>
+            <span>${weakestKpi ? `Weakest: ${weakestKpi.label} (${Number(weakestKpi.score).toFixed(0)})` : "Weakest: N/A"}</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
-export function renderStackedBarChart(canvas, chart, records) {
+export function renderStackedBarChart(canvas, chart, records, onRowSelect) {
   destroyIfExists(chart);
   const isMobile = isMobileViewport();
   return new Chart(canvas, {
@@ -829,45 +936,45 @@ export function renderStackedBarChart(canvas, chart, records) {
           data: records.map((record) => record.transferScore),
           backgroundColor: CHART_COLORS.transfer,
           borderRadius: 8,
-          maxBarThickness: isMobile ? 14 : 18,
-          categoryPercentage: isMobile ? 0.82 : 0.72,
-          barPercentage: isMobile ? 0.9 : 0.82,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
         },
         {
           label: "Admits",
           data: records.map((record) => record.admitsScore),
           backgroundColor: CHART_COLORS.admits,
           borderRadius: 8,
-          maxBarThickness: isMobile ? 14 : 18,
-          categoryPercentage: isMobile ? 0.82 : 0.72,
-          barPercentage: isMobile ? 0.9 : 0.82,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
         },
         {
           label: "AHT",
           data: records.map((record) => record.ahtScore),
           backgroundColor: CHART_COLORS.aht,
           borderRadius: 8,
-          maxBarThickness: isMobile ? 14 : 18,
-          categoryPercentage: isMobile ? 0.82 : 0.72,
-          barPercentage: isMobile ? 0.9 : 0.82,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
         },
         {
           label: "Attendance",
           data: records.map((record) => record.attendanceScore),
           backgroundColor: CHART_COLORS.attendance,
           borderRadius: 8,
-          maxBarThickness: isMobile ? 14 : 18,
-          categoryPercentage: isMobile ? 0.82 : 0.72,
-          barPercentage: isMobile ? 0.9 : 0.82,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
         },
         {
           label: "QA",
           data: records.map((record) => record.qaScore),
           backgroundColor: CHART_COLORS.qa,
           borderRadius: 8,
-          maxBarThickness: isMobile ? 14 : 18,
-          categoryPercentage: isMobile ? 0.82 : 0.72,
-          barPercentage: isMobile ? 0.9 : 0.82,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
         },
       ],
     },
@@ -876,13 +983,23 @@ export function renderStackedBarChart(canvas, chart, records) {
       indexAxis: isMobile ? "y" : "x",
       interaction: {
         mode: isMobile ? "nearest" : "index",
-        axis: isMobile ? "y" : undefined,
-        intersect: false,
+        axis: isMobile ? "y" : "x",
+        intersect: isMobile,
       },
       plugins: {
         ...buildBaseOptions().plugins,
+        strictChartAreaTooltipPlugin: {
+          enabled: true,
+        },
+        exactTouchTooltipPlugin: {
+          enabled: isMobile,
+          strategy: isMobile ? "stacked-horizontal-row-all" : undefined,
+          clearOnMiss: isMobile,
+        },
         tooltip: {
           ...buildBaseOptions().plugins.tooltip,
+          enabled: false,
+          external: isMobile ? undefined : externalStackedTooltip,
           callbacks: {
             title(items) {
               return items[0]?.label || "";
@@ -910,6 +1027,7 @@ export function renderStackedBarChart(canvas, chart, records) {
         x: {
           stacked: true,
           beginAtZero: true,
+          offset: true,
           grid: { display: false },
           ticks: {
             font: {
@@ -932,6 +1050,29 @@ export function renderStackedBarChart(canvas, chart, records) {
             },
           },
         },
+      },
+      layout: {
+        padding: isMobile
+          ? { left: 4, right: 10, top: 0, bottom: 0 }
+          : { left: 8, right: 24, top: 0, bottom: 0 },
+      },
+      onClick(event, _active, chartInstance) {
+        if (!isMobile || typeof onRowSelect !== "function") return;
+        const indexMatches = chartInstance.getElementsAtEventForMode(
+          event,
+          "index",
+          {
+            axis: "y",
+            intersect: false,
+          },
+          false
+        );
+        const rowIndex = indexMatches?.[0]?.index ?? -1;
+
+        if (rowIndex < 0) return;
+        const record = records[rowIndex];
+        if (!record) return;
+        onRowSelect(record);
       },
     },
   });
