@@ -474,8 +474,13 @@ function formatTimeFromSeconds(seconds) {
 }
 
 function averageField(records, field) {
+  const selector = typeof field === "function"
+    ? field
+    : (record) => String(field)
+      .split(".")
+      .reduce((value, key) => value?.[key], record);
   const valid = records
-    .map((record) => record[field])
+    .map((record) => selector(record))
     .filter((value) => typeof value === "number" && !Number.isNaN(value));
   if (!valid.length) return null;
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
@@ -515,6 +520,12 @@ function getSummaryMetrics(records) {
     attendancePercentValue: averageField(records, "attendancePercentValue"),
     qaPercentValue: averageField(records, "qaPercentValue"),
     agentCount: new Set(records.map((record) => record.agentName)).size,
+    overallIncludesQa: records.some((record) => hasValidNumber(record.qaScore)),
+    overallWeights: {
+      performance: averageField(records, "overallWeights.performance"),
+      attendance: averageField(records, "overallWeights.attendance"),
+      qa: averageField(records, "overallWeights.qa"),
+    },
   };
 }
 
@@ -542,6 +553,12 @@ function getScopedWeeklyAverages(records) {
       ahtSeconds: averageField(items, "ahtSeconds"),
       attendancePercentValue: averageField(items, "attendancePercentValue"),
       qaPercentValue: averageField(items, "qaPercentValue"),
+      overallIncludesQa: items.some((item) => hasValidNumber(item.qaScore)),
+      overallWeights: {
+        performance: averageField(items, "overallWeights.performance"),
+        attendance: averageField(items, "overallWeights.attendance"),
+        qa: averageField(items, "overallWeights.qa"),
+      },
     }))
     .sort((left, right) => (left.weekDate?.getTime() ?? 0) - (right.weekDate?.getTime() ?? 0));
 }
@@ -561,6 +578,12 @@ function pickWeekSummary(filteredRecords, weeklyAverages) {
       ahtSeconds: null,
       attendancePercentValue: null,
       qaPercentValue: null,
+      overallIncludesQa: false,
+      overallWeights: {
+        performance: 0,
+        attendance: 0,
+        qa: 0,
+      },
       weekEnding: "No Data",
     };
   }
@@ -770,6 +793,18 @@ function buildCurrentPreviousDetail(label, currentValue, previousValue, formatte
   return `${label}: ${currentText} | Previous: ${previousText}`;
 }
 
+function hasValidNumber(value) {
+  return typeof value === "number" && !Number.isNaN(value);
+}
+
+function describeOverallFormula(summary) {
+  if (!summary) return "Overall score pending";
+  if (summary.overallIncludesQa) {
+    return "Performance + Attendance + QA";
+  }
+  return "Performance + Attendance only | QA pending";
+}
+
 function updateRawCards(metrics) {
   if (!metrics) {
     Object.values(rawMetricMap).forEach((element) => {
@@ -841,7 +876,7 @@ function updateSummaryCards(filteredRecords, weeklyAverages) {
   updateRawDeltas(currentWeekSummary, previousWeekSummary);
 
   const rawText = {
-    overall: `Performance ${buildCurrentPreviousDetail("current", currentWeekSummary.performanceScore, previousWeekSummary?.performanceScore, formatScore)} | Attendance ${buildCurrentPreviousDetail("current", currentWeekSummary.attendanceScore, previousWeekSummary?.attendanceScore, formatScore)} | QA ${buildCurrentPreviousDetail("current", currentWeekSummary.qaScore, previousWeekSummary?.qaScore, formatScore)}`,
+    overall: `${describeOverallFormula(currentWeekSummary)} | Performance ${buildCurrentPreviousDetail("current", currentWeekSummary.performanceScore, previousWeekSummary?.performanceScore, formatScore)} | Attendance ${buildCurrentPreviousDetail("current", currentWeekSummary.attendanceScore, previousWeekSummary?.attendanceScore, formatScore)} | QA ${buildCurrentPreviousDetail("current", currentWeekSummary.qaScore, previousWeekSummary?.qaScore, formatScore)}`,
     transfer: buildCurrentPreviousDetail(
       "Avg transfer rate",
       currentWeekSummary.transferRatePercent,
@@ -873,6 +908,10 @@ function updateSummaryCards(filteredRecords, weeklyAverages) {
       (value) => formatPercent(value)
     ),
   };
+
+  if (!hasValidNumber(currentWeekSummary.qaScore)) {
+    rawText.qa = "QA data pending | Current: N/A | Previous: N/A";
+  }
 
   [
     ["overall", "overallScore"],
@@ -922,18 +961,20 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
   if (elements.comparisonTitle && elements.comparisonSubnote) {
     const selectedWeek = comparisonWeeklyAverages.at(-1)?.weekEnding || "Selected Week";
     const previousWeek = comparisonWeeklyAverages.length > 1 ? comparisonWeeklyAverages[0]?.weekEnding : "No previous week";
+    const qaPending = !hasValidNumber(weekSummary.qaScore);
     elements.comparisonTitle.textContent = "Selected week vs previous week";
     elements.comparisonSubnote.textContent =
       comparisonWeeklyAverages.length > 1
-        ? `${selectedWeek} vs ${previousWeek}.`
-        : `${selectedWeek} has no prior week.`;
+        ? `${selectedWeek} vs ${previousWeek}.${qaPending ? " QA is pending and excluded from overall where missing." : ""}`
+        : `${selectedWeek} has no prior week.${qaPending ? " QA is pending and excluded from overall where missing." : ""}`;
   }
 
   if (elements.rankingSubnote) {
+    const qaPending = !hasValidNumber(weekSummary.qaScore);
     elements.rankingSubnote.textContent =
       state.filters.week !== "all"
-        ? `Top 10 for ${state.filters.week}.`
-        : `Latest top 10 within ${state.filters.month === "all" ? "this view" : state.filters.month}.`;
+        ? `Top 10 for ${state.filters.week}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`
+        : `Latest top 10 within ${state.filters.month === "all" ? "this view" : state.filters.month}.${qaPending ? " QA pending is excluded from overall where missing." : ""}`;
   }
 
   state.charts.trend = renderLineChart(elements.trendChart, state.charts.trend, weeklyAverages);
@@ -946,8 +987,7 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     chartRecords,
     "transferScore",
     "Transfer Distribution",
-    "#3B82F6",
-    openDistributionDrilldown
+    "#3B82F6"
   );
   state.charts.admitsDistribution = renderDistributionChart(
     elements.admitsDistributionChart,
@@ -955,8 +995,7 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     chartRecords,
     "admitsScore",
     "Admits Distribution",
-    "#10B981",
-    openDistributionDrilldown
+    "#10B981"
   );
   state.charts.ahtDistribution = renderDistributionChart(
     elements.ahtDistributionChart,
@@ -964,8 +1003,7 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     chartRecords,
     "ahtScore",
     "AHT Distribution",
-    "#F59E0B",
-    openDistributionDrilldown
+    "#F59E0B"
   );
   state.charts.attendanceDistribution = renderDistributionChart(
     elements.attendanceDistributionChart,
@@ -973,8 +1011,7 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     chartRecords,
     "attendanceScore",
     "Attendance Distribution",
-    "#8B5CF6",
-    openDistributionDrilldown
+    "#8B5CF6"
   );
   state.charts.qaDistribution = renderDistributionChart(
     elements.qaDistributionChart,
@@ -982,8 +1019,7 @@ function updateCharts(filteredRecords, weeklyAverages, scopedRecords) {
     chartRecords,
     "qaScore",
     "QA Distribution",
-    "#EC4899",
-    openDistributionDrilldown
+    "#EC4899"
   );
   state.charts.ranking = renderRankingChart(elements.rankingChart, state.charts.ranking, chartRecords);
   state.charts.stacked = renderStackedBarChart(elements.stackedChart, state.charts.stacked, chartRecords);
@@ -1018,10 +1054,11 @@ function updateTable(filteredRecords) {
 function updateStatus(filteredRecords) {
   const totalAgents = new Set(filteredRecords.map((record) => record.agentName)).size;
   const totalWeeks = new Set(filteredRecords.map((record) => record.weekEnding)).size;
+  const qaAvailable = filteredRecords.some((record) => hasValidNumber(record.qaScore));
   elements.dataStatusText.textContent =
     state.filters.agent === "all"
-      ? `${filteredRecords.length} score rows across ${totalAgents} agents and ${totalWeeks} weeks.`
-      : `${filteredRecords.length} score rows for ${state.filters.agent} across ${totalWeeks} week(s).`;
+      ? `${filteredRecords.length} score rows across ${totalAgents} agents and ${totalWeeks} weeks.${qaAvailable ? "" : " QA data is pending, so overall rankings are using the available KPIs only."}`
+      : `${filteredRecords.length} score rows for ${state.filters.agent} across ${totalWeeks} week(s).${qaAvailable ? "" : " QA data is pending, so overall scores are using the available KPIs only."}`;
 }
 
 function updateLayoutVisibility() {
@@ -1043,6 +1080,9 @@ function updateDashboard() {
     search: "",
   });
   const weeklyAverages = getScopedWeeklyAverages(trendRecords);
+
+  state.distributionDrilldownOpen = false;
+  applyDistributionDrilldownState();
 
   updateInsights(dashboardRecords, weeklyAverages);
   updateSummaryCards(dashboardRecords, weeklyAverages);

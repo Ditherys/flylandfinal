@@ -134,6 +134,10 @@ body {
   display: none;
 }
 
+.distribution-mobile-chip .chip-short {
+  display: none;
+}
+
 .mobile-home-card-table {
   background:
     radial-gradient(circle at top right, rgba(18, 58, 111, 0.14), transparent 38%),
@@ -1573,6 +1577,38 @@ select {
   margin-top: 0.75rem;
 }
 
+.chart-external-tooltip {
+  position: absolute;
+  z-index: 50;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(16, 33, 61, 0.96);
+  color: #f8fbff;
+  box-shadow: 0 16px 32px rgba(16, 33, 61, 0.22);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.chart-external-tooltip-title {
+  font-weight: 800;
+  margin-bottom: 0.45rem;
+}
+
+.chart-external-tooltip-body {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.chart-external-tooltip-footer {
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(248, 251, 255, 0.14);
+  font-weight: 700;
+}
+
 .distribution-card {
   min-height: auto;
 }
@@ -2388,6 +2424,14 @@ tbody td:first-child {
     font-weight: 800;
     letter-spacing: 0.03em;
     text-transform: uppercase;
+  }
+
+  .distribution-mobile-chip .chip-full {
+    display: none;
+  }
+
+  .distribution-mobile-chip .chip-short {
+    display: inline;
   }
 
   .distribution-mobile-chip.is-active {

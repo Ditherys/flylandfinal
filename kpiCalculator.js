@@ -128,11 +128,42 @@ export function calculatePerformanceScore(transferScore, admitsScore, ahtScore) 
   return scores.reduce((sum, value) => sum + value, 0) / scores.length;
 }
 
+export function getOverallComposition(performanceScore, attendanceScore, qaScore) {
+  const baseWeights = {
+    performance: 0.5,
+    attendance: 0.25,
+    qa: 0.25,
+  };
+  const availability = {
+    performance: typeof performanceScore === "number" && !Number.isNaN(performanceScore),
+    attendance: typeof attendanceScore === "number" && !Number.isNaN(attendanceScore),
+    qa: typeof qaScore === "number" && !Number.isNaN(qaScore),
+  };
+  const activeWeight = Object.entries(baseWeights).reduce(
+    (sum, [key, weight]) => sum + (availability[key] ? weight : 0),
+    0
+  );
+
+  return {
+    activeWeight,
+    includesQa: availability.qa,
+    weights: {
+      performance: availability.performance && activeWeight ? baseWeights.performance / activeWeight : 0,
+      attendance: availability.attendance && activeWeight ? baseWeights.attendance / activeWeight : 0,
+      qa: availability.qa && activeWeight ? baseWeights.qa / activeWeight : 0,
+    },
+  };
+}
+
 export function calculateOverallScore(performanceScore, attendanceScore, qaScore) {
-  const required = [performanceScore, attendanceScore, qaScore];
-  const hasMissing = required.some((value) => typeof value !== "number" || Number.isNaN(value));
-  if (hasMissing) return null;
-  return performanceScore * 0.5 + attendanceScore * 0.25 + qaScore * 0.25;
+  const composition = getOverallComposition(performanceScore, attendanceScore, qaScore);
+  if (!composition.activeWeight) return null;
+
+  return (
+    performanceScore * composition.weights.performance +
+    attendanceScore * composition.weights.attendance +
+    qaScore * composition.weights.qa
+  );
 }
 
 function formatAHT(seconds) {
@@ -310,6 +341,7 @@ export function buildKpiDataset(rawDatasets) {
       const attendanceScore = calculateAttendanceScore(record.attendancePercent);
       const qaScore = calculateQAScore(record.qaPercent);
       const performanceScore = calculatePerformanceScore(transferScore, admitsScore, ahtScore);
+      const overallComposition = getOverallComposition(performanceScore, attendanceScore, qaScore);
       const overallScore = calculateOverallScore(performanceScore, attendanceScore, qaScore);
 
       return {
@@ -334,6 +366,8 @@ export function buildKpiDataset(rawDatasets) {
         qaScore,
         performanceScore,
         overallScore,
+        overallIncludesQa: overallComposition.includesQa,
+        overallWeights: overallComposition.weights,
       };
     })
     .sort((left, right) => {
@@ -355,6 +389,12 @@ export function buildKpiDataset(rawDatasets) {
       qaScore: average(items, (item) => item.qaScore),
       performanceScore: average(items, (item) => item.performanceScore),
       overallScore: average(items, (item) => item.overallScore),
+      overallIncludesQa: items.some((item) => item.overallIncludesQa),
+      overallWeights: {
+        performance: average(items, (item) => item.overallWeights?.performance),
+        attendance: average(items, (item) => item.overallWeights?.attendance),
+        qa: average(items, (item) => item.overallWeights?.qa),
+      },
       transferRatePercent: average(items, (item) => item.transferRatePercent),
       admitsCount: average(items, (item) => item.admitsCount),
       ahtSeconds: average(items, (item) => item.ahtSeconds),
