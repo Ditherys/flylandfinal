@@ -29,6 +29,7 @@ const state = {
   distributionDrilldownDetail: null,
   resizeRaf: null,
   charts: {},
+  initialized: false,
 };
 
 const KPI_DEFINITIONS = [
@@ -1372,6 +1373,12 @@ function bindEvents() {
 }
 
 async function init() {
+  if (state.initialized) {
+    return;
+  }
+
+  state.initialized = true;
+
   try {
     elements.dataStatusText.textContent = "Loading Google Sheets data and calculating KPI scores.";
     const rawDatasets = await loadAllDatasets();
@@ -1394,10 +1401,23 @@ async function init() {
     applyDistributionDrilldownState();
     updateDashboard();
   } catch (error) {
+    state.initialized = false;
     console.error(error);
     elements.dataStatusText.textContent = "The dashboard could not load the CSV sources. Check the published sheet permissions and try again.";
     elements.tableBody.innerHTML = '<tr><td colspan="14"><div class="status-message">Unable to load dashboard data.</div></td></tr>';
   }
 }
 
-init();
+const authRequired = document.body?.dataset.requireAuth === "true";
+
+if (!authRequired) {
+  init();
+} else {
+  if (window.__flylandAuthState?.authorized) {
+    init();
+  }
+
+  window.addEventListener("flyland:auth-granted", () => {
+    init();
+  });
+}

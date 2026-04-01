@@ -13,10 +13,34 @@
     />
     <link rel="stylesheet" href="./style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+    <script type="module" src="./auth.js"></script>
     <script type="module" src="./app.js"></script>
   </head>
-  <body>
-    <div class="mobile-topbar">
+  <body data-require-auth="true">
+    <div class="auth-gate" id="authGate">
+      <div class="auth-card">
+        <div class="auth-branding" aria-hidden="true">
+          <div class="auth-branding-ags">
+            <img src="./agslogo.png" alt="" class="auth-branding-ags-logo" />
+          </div>
+          <div class="auth-branding-flyland">
+            <img src="./Flyland.webp" alt="" class="auth-branding-flyland-logo" />
+          </div>
+        </div>
+        <p class="eyebrow">Secure Access</p>
+        <h1>KPI Dashboard</h1>
+        <p class="auth-copy">
+          Sign in with your Google account to continue. Only
+          <strong>@allianceglobalsolutions.com</strong> accounts are allowed.
+        </p>
+        <button id="googleLogin" class="primary-button auth-login-button" type="button">
+          Sign in with Google
+        </button>
+        <p id="authStatus" class="auth-status">Please sign in to open the dashboard.</p>
+      </div>
+    </div>
+
+    <div class="mobile-topbar" id="mobileTopbar" hidden>
       <button id="mobileMenuToggle" class="mobile-icon-button" type="button" aria-expanded="false" aria-controls="mobileSidebarPanel">
         Menu
       </button>
@@ -24,7 +48,7 @@
         Table
       </button>
     </div>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" id="mobileSidebarPanel">
         <div class="brand-block">
           <div class="brand-mark">
@@ -129,6 +153,11 @@
             </div>
           </div>
           <div class="header-meta">
+            <div class="meta-pill auth-session-pill" id="authSessionPill" hidden>
+              <span class="meta-label">Signed In</span>
+              <span id="authUserEmail">--</span>
+              <button id="googleLogout" class="auth-logout-button" type="button">Sign Out</button>
+            </div>
             <div class="meta-pill">
               <span class="meta-label">Data Source</span>
               <span>Google Sheets CSV</span>
@@ -629,6 +658,13 @@
             <span class="mobile-more-action-copy">
               <span class="mobile-more-action-kicker">Refresh</span>
               <strong>Reset Filters</strong>
+            </span>
+          </button>
+          <button id="mobileMoreLogout" class="mobile-more-action mobile-more-action-logout" type="button">
+            <span class="mobile-more-action-icon" aria-hidden="true"></span>
+            <span class="mobile-more-action-copy">
+              <span class="mobile-more-action-kicker">Session</span>
+              <strong>Sign Out</strong>
             </span>
           </button>
         </div>
