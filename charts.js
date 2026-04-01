@@ -16,6 +16,14 @@ const CHART_COLORS = {
   ranking: "#1F2937",
 };
 
+const KPI_TOOLTIP_MAP = [
+  ["Transfer", "transferScore", "transferRateDisplay"],
+  ["Admits", "admitsScore", "admitsCount"],
+  ["AHT", "ahtScore", "ahtDisplay"],
+  ["Attendance", "attendanceScore", "attendancePercentDisplay"],
+  ["QA", "qaScore", "qaPercentDisplay"],
+];
+
 const valueLabelPlugin = {
   id: "valueLabelPlugin",
   afterDatasetsDraw(chart, _args, pluginOptions) {
@@ -23,7 +31,9 @@ const valueLabelPlugin = {
 
     const { ctx } = chart;
     const formatter = pluginOptions.formatter || ((value) => String(value));
+    const insideFormatter = pluginOptions.insideFormatter || null;
     const textColor = pluginOptions.color || "#10213d";
+    const insideTextColor = pluginOptions.insideColor || "#ffffff";
     const fontSize = pluginOptions.fontSize || 11;
     const fontWeight = pluginOptions.fontWeight || "700";
     const offset = pluginOptions.offset ?? 8;
@@ -78,6 +88,32 @@ const valueLabelPlugin = {
           }
         }
 
+        if (chart.chartArea) {
+          const topLimit = chart.chartArea.top + fontSize;
+          const bottomLimit = chart.chartArea.bottom - fontSize;
+          y = Math.min(Math.max(y, topLimit), bottomLimit);
+        }
+
+        if (insideFormatter && chart.config.type === "bar" && !inside) {
+          const insideLabel = insideFormatter(numericValue, {
+            chart,
+            dataset,
+            datasetIndex,
+            dataIndex: index,
+          });
+          if (insideLabel) {
+            const insidePosition = element.tooltipPosition();
+            const insideX = insidePosition.x;
+            const insideY = Math.min(
+              Math.max(insidePosition.y + 10, chart.chartArea?.top + fontSize || insidePosition.y),
+              chart.chartArea?.bottom - fontSize || insidePosition.y
+            );
+            ctx.fillStyle = insideTextColor;
+            ctx.fillText(insideLabel, insideX, insideY);
+            ctx.fillStyle = textColor;
+          }
+        }
+
         ctx.fillText(label, x, y);
       });
     });
@@ -108,10 +144,250 @@ const strictChartAreaTooltipPlugin = {
   },
 };
 
-Chart.register(valueLabelPlugin, strictChartAreaTooltipPlugin);
+const exactTouchTooltipPlugin = {
+  id: "exactTouchTooltipPlugin",
+  afterEvent(chart, args, pluginOptions) {
+    if (!pluginOptions?.enabled) return;
+
+    const event = args.event;
+    if (!event || !["click", "touchstart", "touchmove", "mousemove"].includes(event.type)) return;
+
+    const matches = [];
+    if (pluginOptions.strategy === "horizontal-bar-row") {
+      const meta = chart.getSortedVisibleDatasetMetas()[0];
+      const area = chart.chartArea;
+      meta?.data?.forEach((element, index) => {
+        const props = element.getProps(["y", "height"], true);
+        const left = area?.left ?? 0;
+        const right = area?.right ?? 0;
+        const top = props.y - props.height / 2 - 6;
+        const bottom = props.y + props.height / 2 + 6;
+
+        if (event.y >= top && event.y <= bottom && event.x >= left && event.x <= right) {
+          matches.push({
+            datasetIndex: meta.index,
+            index,
+          });
+        }
+      });
+    } else if (pluginOptions.strategy === "stacked-horizontal-row-all") {
+      const metas = chart.getSortedVisibleDatasetMetas();
+      const leadMeta = metas[0];
+      const area = chart.chartArea;
+      leadMeta?.data?.forEach((element, index) => {
+        const props = element.getProps(["y", "height"], true);
+        const left = area?.left ?? 0;
+        const right = area?.right ?? 0;
+        const top = props.y - props.height / 2 - 8;
+        const bottom = props.y + props.height / 2 + 8;
+
+        if (event.y >= top && event.y <= bottom && event.x >= left && event.x <= right) {
+          metas.forEach((meta) => {
+            matches.push({
+              datasetIndex: meta.index,
+              index,
+            });
+          });
+        }
+      });
+    } else {
+      chart.getSortedVisibleDatasetMetas().forEach((meta) => {
+        meta.data.forEach((element, index) => {
+          if (typeof element.inRange === "function" && element.inRange(event.x, event.y, true)) {
+            matches.push({
+              datasetIndex: meta.index,
+              index,
+            });
+          }
+        });
+      });
+    }
+
+    if (!matches.length) {
+      if (pluginOptions.clearOnMiss) {
+        chart.setActiveElements([]);
+        chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+        args.changed = true;
+      }
+      return;
+    }
+
+    const [match] = matches;
+    const element = chart.getDatasetMeta(match.datasetIndex)?.data?.[match.index];
+    if (!element) return;
+
+    const props = element.getProps(["x", "y", "base"], true);
+    const position = pluginOptions.strategy === "horizontal-bar-row" || pluginOptions.strategy === "stacked-horizontal-row-all"
+      ? {
+        x: (Number(props.x) + Number(props.base)) / 2,
+        y: Number(props.y),
+      }
+      : element.tooltipPosition();
+    chart.setActiveElements(matches);
+    chart.tooltip?.setActiveElements(matches, position);
+    args.changed = true;
+  },
+};
+
+Chart.register(valueLabelPlugin, strictChartAreaTooltipPlugin, exactTouchTooltipPlugin);
 
 function destroyIfExists(chart) {
+  if (chart?.canvas?.dataset?.externalTooltipId) {
+    const tooltip = document.getElementById(chart.canvas.dataset.externalTooltipId);
+    tooltip?.remove();
+    delete chart.canvas.dataset.externalTooltipId;
+  }
   if (chart) chart.destroy();
+}
+
+function getOrCreateExternalTooltip(canvas) {
+  if (!canvas?.id) return null;
+  const tooltipId = `${canvas.id}-external-tooltip`;
+  let tooltip = document.getElementById(tooltipId);
+
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = tooltipId;
+    tooltip.className = "chart-external-tooltip";
+    document.body.appendChild(tooltip);
+  }
+
+  canvas.dataset.externalTooltipId = tooltipId;
+  return tooltip;
+}
+
+function renderTooltipSection(lines, className = "") {
+  if (!lines?.length) return "";
+  return `<div class="${className}">${lines.map((line) => `<div>${line}</div>`).join("")}</div>`;
+}
+
+function externalDistributionTooltip(context) {
+  const { chart, tooltip } = context;
+  const tooltipEl = getOrCreateExternalTooltip(chart.canvas);
+  if (!tooltipEl) return;
+
+  if (tooltip.opacity === 0) {
+    tooltipEl.style.opacity = "0";
+    tooltipEl.style.pointerEvents = "none";
+    return;
+  }
+
+  const titleLines = tooltip.title || [];
+  const bodyLines = (tooltip.body || []).flatMap((bodyItem) => bodyItem.lines || []);
+  const afterBodyLines = tooltip.afterBody || [];
+  const footerLines = tooltip.footer || [];
+
+  tooltipEl.innerHTML = [
+    renderTooltipSection(titleLines, "chart-external-tooltip-title"),
+    renderTooltipSection(bodyLines, "chart-external-tooltip-body"),
+    renderTooltipSection(afterBodyLines, "chart-external-tooltip-body chart-external-tooltip-agents"),
+    renderTooltipSection(footerLines, "chart-external-tooltip-footer"),
+  ].join("");
+
+  const canvasRect = chart.canvas.getBoundingClientRect();
+  const tooltipRect = tooltipEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const gap = 14;
+
+  let left = canvasRect.left + window.scrollX + tooltip.caretX - tooltipRect.width / 2;
+  let top = canvasRect.top + window.scrollY + tooltip.caretY - tooltipRect.height - gap;
+
+  if (left + tooltipRect.width > window.scrollX + viewportWidth - 12) {
+    left = window.scrollX + viewportWidth - tooltipRect.width - 12;
+  }
+  if (left < window.scrollX + 12) {
+    left = window.scrollX + 12;
+  }
+
+  if (top < window.scrollY + 12) {
+    top = canvasRect.top + window.scrollY + tooltip.caretY + gap;
+  }
+  if (top + tooltipRect.height > window.scrollY + viewportHeight - 12) {
+    top = Math.max(window.scrollY + 12, window.scrollY + viewportHeight - tooltipRect.height - 12);
+  }
+
+  tooltipEl.style.opacity = "1";
+  tooltipEl.style.pointerEvents = "none";
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+}
+
+function externalStackedTooltip(context) {
+  const { chart, tooltip } = context;
+  const tooltipEl = getOrCreateExternalTooltip(chart.canvas);
+  if (!tooltipEl) return;
+
+  if (tooltip.opacity === 0) {
+    tooltipEl.style.opacity = "0";
+    tooltipEl.style.pointerEvents = "none";
+    return;
+  }
+
+  const title = tooltip.title?.[0] || "";
+  const uniqueDataPoints = (tooltip.dataPoints || []).map((dataPoint, index) => ({
+    dataPoint,
+    bodyLines: tooltip.body?.[index]?.lines || [],
+  })).filter(({ dataPoint }, index, items) => {
+    const datasetLabel = dataPoint?.dataset?.label || "";
+    const dataIndex = dataPoint?.dataIndex ?? -1;
+    return index === items.findIndex((item) => {
+      const itemLabel = item?.dataPoint?.dataset?.label || "";
+      const itemIndex = item?.dataPoint?.dataIndex ?? -1;
+      return itemLabel === datasetLabel && itemIndex === dataIndex;
+    });
+  });
+
+  const tooltipRows = uniqueDataPoints.map(({ dataPoint, bodyLines }) => {
+    const color = dataPoint?.dataset?.backgroundColor || "#10213d";
+    const kpiLabel = dataPoint?.dataset?.label || "";
+    return `
+      <div class="chart-external-tooltip-row">
+        <div class="chart-external-tooltip-kpi">
+          <span class="chart-external-tooltip-swatch" style="background:${color}"></span>
+          <strong>${kpiLabel}</strong>
+        </div>
+        <div class="chart-external-tooltip-body">
+          ${bodyLines.map((line) => `<div>${line}</div>`).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+  const footer = tooltip.footer?.[0] || "";
+
+  tooltipEl.innerHTML = `
+    <div class="chart-external-tooltip-title">${title}</div>
+    <div class="chart-external-tooltip-rows">${tooltipRows}</div>
+    ${footer ? `<div class="chart-external-tooltip-footer">${footer}</div>` : ""}
+  `;
+
+  const canvasRect = chart.canvas.getBoundingClientRect();
+  const tooltipRect = tooltipEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const gap = 14;
+
+  let left = canvasRect.left + window.scrollX + tooltip.caretX - tooltipRect.width / 2;
+  let top = canvasRect.top + window.scrollY + tooltip.caretY - tooltipRect.height - gap;
+
+  if (left + tooltipRect.width > window.scrollX + viewportWidth - 12) {
+    left = window.scrollX + viewportWidth - tooltipRect.width - 12;
+  }
+  if (left < window.scrollX + 12) {
+    left = window.scrollX + 12;
+  }
+
+  if (top < window.scrollY + 12) {
+    top = canvasRect.top + window.scrollY + tooltip.caretY + gap;
+  }
+  if (top + tooltipRect.height > window.scrollY + viewportHeight - 12) {
+    top = Math.max(window.scrollY + 12, window.scrollY + viewportHeight - tooltipRect.height - 12);
+  }
+
+  tooltipEl.style.opacity = "1";
+  tooltipEl.style.pointerEvents = "none";
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
 }
 
 function buildBaseOptions() {
@@ -196,6 +472,22 @@ function hexToRgba(hex, alpha) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.innerWidth <= 720;
+}
+
+function getMobileKpiLabel(label) {
+  const labelMap = {
+    Transfer: "TR",
+    Admits: "AD",
+    AHT: "AHT",
+    Attendance: "ATT",
+    QA: "QA",
+    Overall: "OVR",
+  };
+  return isMobileViewport() ? (labelMap[label] || label) : label;
+}
+
 function formatSnapshotLabel(label, weekSummary) {
   const rawMap = {
     Transfer: formatPercent(weekSummary.transferRatePercent),
@@ -211,6 +503,7 @@ function formatSnapshotLabel(label, weekSummary) {
 
 function formatComparisonRaw(label, weekSummary) {
   if (!weekSummary) return "Average: N/A";
+  const includesQa = Boolean(weekSummary.overallIncludesQa);
 
   const rawMap = {
     Transfer: `Avg rate: ${formatPercent(weekSummary.transferRatePercent)}`,
@@ -222,7 +515,7 @@ function formatComparisonRaw(label, weekSummary) {
     AHT: `Avg time: ${formatTime(weekSummary.ahtSeconds)}`,
     Attendance: `Avg attendance: ${formatPercent(weekSummary.attendancePercentValue)}`,
     QA: `Avg QA: ${formatPercent(weekSummary.qaPercentValue)}`,
-    Overall: `Weighted overall: ${
+    Overall: `${includesQa ? "Weighted overall" : "Weighted overall | QA pending"}: ${
       weekSummary.overallScore === null || weekSummary.overallScore === undefined
         ? "N/A"
         : Number(weekSummary.overallScore).toFixed(2)
@@ -234,6 +527,35 @@ function formatComparisonRaw(label, weekSummary) {
 
 function isValidMetric(value) {
   return typeof value === "number" && !Number.isNaN(value);
+}
+
+function getOverallBreakdown(summary) {
+  if (!summary) {
+    return {
+      includesQa: false,
+      weights: { performance: 0, attendance: 0, qa: 0 },
+    };
+  }
+
+  return {
+    includesQa: Boolean(summary.overallIncludesQa),
+    weights: {
+      performance: summary.overallWeights?.performance ?? 0,
+      attendance: summary.overallWeights?.attendance ?? 0,
+      qa: summary.overallWeights?.qa ?? 0,
+    },
+  };
+}
+
+function getWeakestKpi(record) {
+  return KPI_TOOLTIP_MAP
+    .map(([label, scoreKey, rawKey]) => ({
+      label,
+      score: record?.[scoreKey],
+      rawValue: record?.[rawKey],
+    }))
+    .filter((item) => isValidMetric(item.score))
+    .sort((left, right) => left.score - right.score || left.label.localeCompare(right.label))[0] || null;
 }
 
 export function renderLineChart(canvas, chart, weeklyAverages) {
@@ -283,10 +605,11 @@ export function renderLineChart(canvas, chart, weeklyAverages) {
 
 export function renderBarChart(canvas, chart, weekSummary) {
   destroyIfExists(chart);
+  const chartLabels = ["Transfer", "Admits", "AHT", "Attendance", "QA", "Overall"];
   return new Chart(canvas, {
     type: "bar",
     data: {
-      labels: ["Transfer", "Admits", "AHT", "Attendance", "QA", "Overall"],
+      labels: chartLabels.map((label) => getMobileKpiLabel(label)),
       datasets: [
         {
           label: "Average Score",
@@ -311,8 +634,12 @@ export function renderBarChart(canvas, chart, weekSummary) {
           enabled: true,
           color: "#10213d",
           fontSize: 11,
+          insideFormatter(value) {
+            return Number(value).toFixed(2);
+          },
+          insideColor: "#ffffff",
           formatter(_value, context) {
-            const label = context.chart.data.labels?.[context.dataIndex];
+            const label = chartLabels[context.dataIndex];
             return formatSnapshotLabel(label, weekSummary);
           },
         },
@@ -320,7 +647,7 @@ export function renderBarChart(canvas, chart, weekSummary) {
           ...buildBaseOptions().plugins.tooltip,
           callbacks: {
             label(context) {
-              const label = context.label;
+              const label = chartLabels[context.dataIndex];
               const rawMap = {
                 Transfer: `Avg rate: ${formatPercent(weekSummary.transferRatePercent)}`,
                 Admits: `Avg count: ${weekSummary.admitsCount === null || weekSummary.admitsCount === undefined ? "N/A" : Number(weekSummary.admitsCount).toFixed(2)}`,
@@ -340,14 +667,17 @@ export function renderBarChart(canvas, chart, weekSummary) {
 
 export function renderContributionChart(canvas, chart, weekSummary) {
   destroyIfExists(chart);
+  const overallBreakdown = getOverallBreakdown(weekSummary);
   const performanceAvailable = isValidMetric(weekSummary.performanceScore);
   const attendanceAvailable = isValidMetric(weekSummary.attendanceScore);
   const qaAvailable = isValidMetric(weekSummary.qaScore);
   const contributionConfig = [
     {
       key: "performance",
-      label: performanceAvailable ? "Performance (50%)" : "Performance (Missing)",
-      value: performanceAvailable ? weekSummary.performanceScore * 0.5 : 0,
+      label: performanceAvailable
+        ? `Performance (${Math.round(overallBreakdown.weights.performance * 100)}%)`
+        : "Performance (Missing)",
+      value: performanceAvailable ? weekSummary.performanceScore * overallBreakdown.weights.performance : 0,
       score: weekSummary.performanceScore,
       color: performanceAvailable ? CHART_COLORS.overall : "#d5ddea",
       detail: performanceAvailable
@@ -356,8 +686,10 @@ export function renderContributionChart(canvas, chart, weekSummary) {
     },
     {
       key: "attendance",
-      label: attendanceAvailable ? "Attendance (25%)" : "Attendance (Missing)",
-      value: attendanceAvailable ? weekSummary.attendanceScore * 0.25 : 0,
+      label: attendanceAvailable
+        ? `Attendance (${Math.round(overallBreakdown.weights.attendance * 100)}%)`
+        : "Attendance (Missing)",
+      value: attendanceAvailable ? weekSummary.attendanceScore * overallBreakdown.weights.attendance : 0,
       score: weekSummary.attendanceScore,
       color: attendanceAvailable ? CHART_COLORS.attendance : "#d5ddea",
       detail: attendanceAvailable
@@ -366,13 +698,13 @@ export function renderContributionChart(canvas, chart, weekSummary) {
     },
     {
       key: "qa",
-      label: qaAvailable ? "QA (25%)" : "QA (Missing)",
-      value: qaAvailable ? weekSummary.qaScore * 0.25 : 0,
+      label: qaAvailable ? `QA (${Math.round(overallBreakdown.weights.qa * 100)}%)` : "QA (Pending)",
+      value: qaAvailable ? weekSummary.qaScore * overallBreakdown.weights.qa : 0,
       score: weekSummary.qaScore,
       color: qaAvailable ? CHART_COLORS.qa : "#d5ddea",
       detail: qaAvailable
         ? `QA score: ${Number(weekSummary.qaScore).toFixed(2)}`
-        : "QA data is unavailable",
+        : "QA data is pending and excluded from overall where missing",
     },
   ];
   return new Chart(canvas, {
@@ -400,7 +732,8 @@ export function renderContributionChart(canvas, chart, weekSummary) {
           ...buildBaseOptions().plugins.tooltip,
           callbacks: {
             title(items) {
-              return items[0]?.label || "";
+              const index = items[0]?.dataIndex ?? -1;
+              return kpiLabels[index] || "";
             },
             label(context) {
               const item = contributionConfig[context.dataIndex];
@@ -423,6 +756,7 @@ export function renderContributionChart(canvas, chart, weekSummary) {
 
 export function renderVarianceChart(canvas, chart, weeklyAverages) {
   destroyIfExists(chart);
+  const isMobile = isMobileViewport();
   const currentWeek = weeklyAverages.at(-1) || null;
   const previousWeek = weeklyAverages.length > 1 ? weeklyAverages[0] : null;
   const kpiLabels = ["Transfer", "Admits", "AHT", "Attendance", "QA", "Overall"];
@@ -455,7 +789,7 @@ export function renderVarianceChart(canvas, chart, weeklyAverages) {
   return new Chart(canvas, {
     type: "bar",
     data: {
-      labels: kpiLabels,
+      labels: kpiLabels.map((label) => getMobileKpiLabel(label)),
       datasets: [
         {
           label: "Variance",
@@ -473,16 +807,27 @@ export function renderVarianceChart(canvas, chart, weeklyAverages) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: "nearest",
+        axis: "x",
+        intersect: false,
+      },
       plugins: {
         legend: {
           display: false,
         },
+        strictChartAreaTooltipPlugin: {
+          enabled: true,
+        },
+        exactTouchTooltipPlugin: {
+          enabled: isMobile,
+        },
         valueLabelPlugin: {
           enabled: true,
           color: "#10213d",
-          fontSize: 11,
+          fontSize: isMobile ? 10 : 11,
           fontWeight: "800",
-          offset: 10,
+          offset: isMobile ? 6 : 10,
           formatter(value) {
             const prefix = value > 0 ? "+" : "";
             return `${prefix}${Number(value).toFixed(2)}`;
@@ -525,114 +870,143 @@ export function renderVarianceChart(canvas, chart, weeklyAverages) {
           grid: {
             display: false,
           },
+          ticks: {
+            font: {
+              size: isMobile ? 10 : 12,
+            },
+          },
+        },
+      },
+      layout: {
+        padding: {
+          top: isMobile ? 14 : 4,
+          right: 6,
         },
       },
     },
   });
 }
 
-export function renderRankingChart(canvas, chart, records) {
-  destroyIfExists(chart);
+export function renderRankingList(container, records) {
+  if (!container) return;
   const ranked = [...records]
     .filter((record) => typeof record.overallScore === "number" && !Number.isNaN(record.overallScore))
     .sort((left, right) => right.overallScore - left.overallScore)
-    .slice(0, 10);
-  return new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels: ranked.map((record) => record.agentName),
-      datasets: [
-        {
-          label: "Overall Score",
-          data: ranked.map((record) => record.overallScore),
-          backgroundColor: CHART_COLORS.ranking,
-          borderColor: "#0f172a",
-          borderWidth: 1.5,
-          borderRadius: 10,
-          barThickness: 18,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: "y",
-      interaction: {
-        mode: "nearest",
-        axis: "xy",
-        intersect: true,
-      },
-      plugins: {
-        legend: {
-          display: false,
-        },
-        strictChartAreaTooltipPlugin: {
-          enabled: true,
-        },
-        valueLabelPlugin: {
-          enabled: true,
-          color: "#ffffff",
-          fontSize: 11,
-          fontWeight: "800",
-          inside: true,
-          offset: 10,
-          formatter(value) {
-            return Number(value).toFixed(2);
-          },
-        },
-        tooltip: {
-          enabled: false,
-        },
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          max: 5,
-          grid: {
-            color: "rgba(16, 33, 61, 0.08)",
-          },
-        },
-        y: {
-          ticks: {
-            font: {
-              size: 11,
-            },
-          },
-          grid: {
-            display: false,
-          },
-        },
-      },
-    },
-  });
+    .slice(0, 5);
+  if (!ranked.length) {
+    container.innerHTML = '<div class="status-message">No ranked rows are available for the current selection.</div>';
+    return;
+  }
+
+  container.innerHTML = ranked.map((record, index) => {
+    const weakestKpi = getWeakestKpi(record);
+    const rankClass = index === 0 ? "is-rank-1" : index === 1 ? "is-rank-2" : index === 2 ? "is-rank-3" : "";
+    const width = Math.max(8, Math.min(100, (Number(record.overallScore) / 5) * 100));
+    return `
+      <article class="ranking-list-item ${rankClass}" role="listitem">
+        <div class="ranking-list-rank">#${index + 1}</div>
+        <div class="ranking-list-main">
+          <div class="ranking-list-topline">
+            <strong>${record.agentName}</strong>
+            <span>${Number(record.overallScore).toFixed(2)}</span>
+          </div>
+          <div class="ranking-list-bar-track" aria-hidden="true">
+            <span class="ranking-list-bar-fill" style="width: ${width}%"></span>
+          </div>
+          <div class="ranking-list-meta">
+            <span>Performance ${isValidMetric(record?.performanceScore) ? Number(record.performanceScore).toFixed(2) : "N/A"}</span>
+            <span>${weakestKpi ? `Weakest: ${weakestKpi.label} (${Number(weakestKpi.score).toFixed(0)})` : "Weakest: N/A"}</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
-export function renderStackedBarChart(canvas, chart, records) {
+export function renderStackedBarChart(canvas, chart, records, onRowSelect) {
   destroyIfExists(chart);
+  const isMobile = isMobileViewport();
   return new Chart(canvas, {
     type: "bar",
     data: {
       labels: records.map((record) => record.agentName),
       datasets: [
-        { label: "Transfer", data: records.map((record) => record.transferScore), backgroundColor: CHART_COLORS.transfer },
-        { label: "Admits", data: records.map((record) => record.admitsScore), backgroundColor: CHART_COLORS.admits },
-        { label: "AHT", data: records.map((record) => record.ahtScore), backgroundColor: CHART_COLORS.aht },
-        { label: "Attendance", data: records.map((record) => record.attendanceScore), backgroundColor: CHART_COLORS.attendance },
-        { label: "QA", data: records.map((record) => record.qaScore), backgroundColor: CHART_COLORS.qa },
+        {
+          label: "Transfer",
+          data: records.map((record) => record.transferScore),
+          backgroundColor: CHART_COLORS.transfer,
+          borderRadius: 8,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
+        },
+        {
+          label: "Admits",
+          data: records.map((record) => record.admitsScore),
+          backgroundColor: CHART_COLORS.admits,
+          borderRadius: 8,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
+        },
+        {
+          label: "AHT",
+          data: records.map((record) => record.ahtScore),
+          backgroundColor: CHART_COLORS.aht,
+          borderRadius: 8,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
+        },
+        {
+          label: "Attendance",
+          data: records.map((record) => record.attendanceScore),
+          backgroundColor: CHART_COLORS.attendance,
+          borderRadius: 8,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
+        },
+        {
+          label: "QA",
+          data: records.map((record) => record.qaScore),
+          backgroundColor: CHART_COLORS.qa,
+          borderRadius: 8,
+          maxBarThickness: isMobile ? 18 : 18,
+          categoryPercentage: isMobile ? 0.9 : 0.72,
+          barPercentage: isMobile ? 0.98 : 0.82,
+        },
       ],
     },
     options: {
       ...buildBaseOptions(),
+      indexAxis: isMobile ? "y" : "x",
+      interaction: {
+        mode: isMobile ? "nearest" : "index",
+        axis: isMobile ? "y" : "x",
+        intersect: isMobile,
+      },
       plugins: {
         ...buildBaseOptions().plugins,
+        strictChartAreaTooltipPlugin: {
+          enabled: true,
+        },
+        exactTouchTooltipPlugin: {
+          enabled: isMobile,
+          strategy: isMobile ? "stacked-horizontal-row-all" : undefined,
+          clearOnMiss: isMobile,
+        },
         tooltip: {
           ...buildBaseOptions().plugins.tooltip,
+          enabled: false,
+          external: isMobile ? undefined : externalStackedTooltip,
           callbacks: {
             title(items) {
               return items[0]?.label || "";
             },
             label(context) {
               const record = records[context.dataIndex];
+              const parsedValue = Number(context.parsed?.[isMobile ? "x" : "y"]);
               const rawMap = {
                 Transfer: `Avg rate: ${formatPercent(record?.transferRatePercent)}`,
                 Admits: `Avg count: ${record?.admitsCount === null || record?.admitsCount === undefined ? "N/A" : Number(record.admitsCount).toFixed(0)}`,
@@ -640,11 +1014,11 @@ export function renderStackedBarChart(canvas, chart, records) {
                 Attendance: `Avg attendance: ${formatPercent(record?.attendancePercentValue)}`,
                 QA: `Avg QA: ${formatPercent(record?.qaPercentValue)}`,
               };
-              return [`Score: ${Number(context.parsed.y).toFixed(2)}`, rawMap[context.dataset.label]];
+              return [`Score: ${Number.isFinite(parsedValue) ? parsedValue.toFixed(2) : "N/A"}`, rawMap[context.dataset.label]];
             },
             footer(items) {
-              const total = items.reduce((sum, item) => sum + Number(item.parsed.y || 0), 0);
-              return `Total KPI Sum: ${total.toFixed(2)}`;
+              const total = items.reduce((sum, item) => sum + Number(item.parsed?.[isMobile ? "x" : "y"] || 0), 0);
+              return `Combined KPI total: ${total.toFixed(2)}`;
             },
           },
         },
@@ -652,13 +1026,53 @@ export function renderStackedBarChart(canvas, chart, records) {
       scales: {
         x: {
           stacked: true,
+          beginAtZero: true,
+          offset: true,
           grid: { display: false },
+          ticks: {
+            font: {
+              size: isMobile ? 10 : 12,
+            },
+          },
         },
         y: {
           stacked: true,
           beginAtZero: true,
           grid: { color: "rgba(16, 33, 61, 0.08)" },
+          ticks: {
+            font: {
+              size: isMobile ? 10 : 11,
+            },
+            callback(value, index) {
+              const label = this.getLabelForValue(value);
+              if (!isMobile) return label;
+              return label.length > 22 ? `${label.slice(0, 22)}...` : label;
+            },
+          },
         },
+      },
+      layout: {
+        padding: isMobile
+          ? { left: 4, right: 10, top: 0, bottom: 0 }
+          : { left: 8, right: 24, top: 0, bottom: 0 },
+      },
+      onClick(event, _active, chartInstance) {
+        if (!isMobile || typeof onRowSelect !== "function") return;
+        const indexMatches = chartInstance.getElementsAtEventForMode(
+          event,
+          "index",
+          {
+            axis: "y",
+            intersect: false,
+          },
+          false
+        );
+        const rowIndex = indexMatches?.[0]?.index ?? -1;
+
+        if (rowIndex < 0) return;
+        const record = records[rowIndex];
+        if (!record) return;
+        onRowSelect(record);
       },
     },
   });
@@ -682,7 +1096,7 @@ export function renderComparisonChart(canvas, chart, weeklyAverages) {
   return new Chart(canvas, {
     type: "bar",
     data: {
-      labels: kpiLabels,
+      labels: kpiLabels.map((label) => getMobileKpiLabel(label)),
       datasets: [
         {
           label: previousWeek?.weekEnding || "Previous Week",
@@ -733,13 +1147,14 @@ export function renderComparisonChart(canvas, chart, weeklyAverages) {
           ...buildBaseOptions().plugins.tooltip,
           callbacks: {
             title(items) {
-              return items[0]?.label || "";
+              const index = items[0]?.dataIndex ?? -1;
+              return kpiLabels[index] || "";
             },
             label(context) {
               const weekSummary = context.datasetIndex === 0 ? previousWeek : currentWeek;
               return [
                 `${context.dataset.label}: ${Number(context.parsed.y).toFixed(2)}`,
-                formatComparisonRaw(context.label, weekSummary),
+                formatComparisonRaw(kpiLabels[context.dataIndex], weekSummary),
               ];
             },
             footer(items) {
@@ -780,9 +1195,22 @@ function buildDistributionData(records, field) {
   const counts = [1, 2, 3, 4, 5].map((score) => ({
     score,
     count: records.filter((record) => Math.round(record[field]) === score).length,
+    agents: records
+      .filter((record) => Math.round(record[field]) === score)
+      .map((record) => record.agentName)
+      .sort((left, right) => left.localeCompare(right)),
   }));
   const total = counts.reduce((sum, item) => sum + item.count, 0);
   return { counts, total };
+}
+
+function buildDistributionAgentTooltipLines(agents) {
+  if (!agents.length) return ["Agents: none"];
+  const lines = ["Agents:"];
+  agents.forEach((agent) => {
+    lines.push(`- ${agent}`);
+  });
+  return lines;
 }
 
 export function renderDistributionChart(canvas, chart, records, field, label, color) {
@@ -832,16 +1260,8 @@ export function renderDistributionChart(canvas, chart, records, field, label, co
           },
         },
         tooltip: {
-          backgroundColor: "rgba(16, 33, 61, 0.96)",
-          titleFont: {
-            size: 14,
-            weight: "700",
-          },
-          bodyFont: {
-            size: 13,
-          },
-          padding: 12,
-          cornerRadius: 12,
+          enabled: false,
+          external: externalDistributionTooltip,
           callbacks: {
             title(items) {
               return items[0]?.label || "";
@@ -850,6 +1270,14 @@ export function renderDistributionChart(canvas, chart, records, field, label, co
               const count = Number(context.parsed.y || 0);
               const percent = total ? ((count / total) * 100).toFixed(1) : "0.0";
               return [`Agents: ${count}`, `Share: ${percent}%`];
+            },
+            afterBody(items) {
+              const index = items[0]?.dataIndex ?? -1;
+              if (index < 0) return [];
+              return buildDistributionAgentTooltipLines(counts[index]?.agents || []);
+            },
+            afterLabel() {
+              return [];
             },
             footer() {
               return `Scored agents: ${total}`;
